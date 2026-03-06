@@ -1,15 +1,16 @@
-name: Lotto_Auto_Update_V3
+name: Lotto Auto Update
 
 on:
   schedule:
-    # 台灣時間每天晚上 22:30 執行 (國際時間 14:30)
     - cron: '30 14 * * *'
-  workflow_dispatch: # 讓你可以隨時點擊按鈕手動測試更新
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+    
     steps:
       - name: 檢出儲存庫代碼
         uses: actions/checkout@v3
@@ -27,18 +28,14 @@ jobs:
       - name: 執行爬蟲腳本
         run: python crawler.py
 
-     - name: 將更新後的數據存回 GitHub
+      - name: 將更新後的數據存回 GitHub
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git pull origin main # 先拉取遠端變動，避免衝突
           git add data.json
-          # 檢查是否有檔案變動，有才提交
           if [ -n "$(git status --porcelain)" ]; then
             git commit -m "自動更新獎號數據: $(date)"
-            git push https://${{ title_token }}@github.com/${{ github.repository }}.git main
+            git push
           else
             echo "沒有新數據，跳過更新"
           fi
-        env:
-          title_token: ${{ secrets.GITHUB_TOKEN }}
