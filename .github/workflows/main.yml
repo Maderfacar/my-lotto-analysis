@@ -27,11 +27,18 @@ jobs:
       - name: 執行爬蟲腳本
         run: python crawler.py
 
-      - name: 將更新後的數據存回 GitHub
+     - name: 將更新後的數據存回 GitHub
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git pull origin main # 先拉取遠端變動，避免衝突
           git add data.json
-          # 如果沒有數據變動就不執行 commit，避免報錯
-          git commit -m "自動更新獎號數據: $(date)" || exit 0
-          git push
+          # 檢查是否有檔案變動，有才提交
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "自動更新獎號數據: $(date)"
+            git push https://${{ title_token }}@github.com/${{ github.repository }}.git main
+          else
+            echo "沒有新數據，跳過更新"
+          fi
+        env:
+          title_token: ${{ secrets.GITHUB_TOKEN }}
