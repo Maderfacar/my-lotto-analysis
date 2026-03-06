@@ -1,1 +1,37 @@
+name: Lotto Auto Update
 
+on:
+  schedule:
+    # 台灣時間每天晚上 22:30 執行 (國際時間 14:30)
+    - cron: '30 14 * * *'
+  workflow_dispatch: # 讓你可以隨時點擊按鈕手動測試更新
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 檢出儲存庫代碼
+        uses: actions/checkout@v3
+
+      - name: 設定 Python 環境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 安裝爬蟲必要套件
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      - name: 執行爬蟲腳本
+        run: python crawler.py
+
+      - name: 將更新後的數據存回 GitHub
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data.json
+          # 如果沒有數據變動就不執行 commit，避免報錯
+          git commit -m "自動更新獎號數據: $(date)" || exit 0
+          git push
