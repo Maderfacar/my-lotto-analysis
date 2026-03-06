@@ -2,121 +2,105 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>自動化隔期規律與水位分析儀 v3.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>彩券水位規律分析儀</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .gap-cell { min-width: 65px; font-size: 11px; text-align: center; border: 1px solid #edf2f7; }
-        .number-ball { display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; border-radius: 50%; background: #3b82f6; color: white; font-weight: bold; margin-right: 2px; font-size: 12px; }
-        .special-ball { background: #ef4444; }
-        .hit-box { background: #dcfce7; color: #166534; font-weight: bold; border: 1px solid #86efac; border-radius: 4px; padding: 2px; }
-        .sum-badge { background: #ebf8ff; color: #2b6cb0; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-family: monospace; }
+        .ball { @apply w-8 h-8 rounded-full flex items-center justify-center text-white font-bold shadow-sm; }
+        .ball-red { background: radial-gradient(circle at 30% 30%, #ff5f6d, #ff3131); }
+        .ball-blue { background: radial-gradient(circle at 30% 30%, #2193b0, #6dd5ed); }
     </style>
 </head>
-<body class="bg-gray-50 p-4">
-    <div class="max-w-full mx-auto bg-white p-6 rounded-lg shadow-md mb-6 border-t-4 border-blue-600">
-        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-            <h1 class="text-xl font-bold text-gray-800">📊 自動化規律分析儀 <span id="updateTime" class="text-xs font-normal text-gray-400 ml-2"></span></h1>
-            <div class="flex gap-4">
-                <select id="lottoType" onchange="render()" class="border p-2 rounded bg-white shadow-sm text-sm">
-                    <option value="649">大樂透 (6+1)</option>
-                    <option value="539">今彩 539 (5)</option>
+<body class="bg-slate-50 p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h1 class="text-2xl font-black text-slate-800 border-l-4 border-blue-600 pl-3">數據規律監測站</h1>
+            
+            <div class="flex items-center gap-2">
+                <span class="text-gray-600 font-medium">切換遊戲：</span>
+                <select id="gameSelect" class="bg-white border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="649">大樂透 (6/49)</option>
+                    <option value="539">今彩 539</option>
                 </select>
             </div>
         </div>
+
+        <div id="status" class="text-xs text-gray-400 mb-4 text-right">正在連線至數據庫...</div>
+
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+            <table class="w-full text-center">
+                <thead class="bg-slate-800 text-white text-sm">
+                    <tr>
+                        <th class="p-4">期別/日期</th>
+                        <th class="p-4">開獎號碼 (由小到大)</th>
+                        <th class="p-4">水位 (Sum)</th>
+                    </tr>
+                </thead>
+                <tbody id="resultBody" class="divide-y divide-gray-100 text-slate-700">
+                    </tbody>
+            </table>
+        </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow overflow-x-auto">
-        <table class="w-full text-left border-collapse">
-            <thead class="bg-gray-800 text-white text-xs">
-                <tr id="headerRow">
-                    <th class="p-3 sticky left-0 bg-gray-800">期別/日期</th>
-                    <th class="p-3 min-w-[200px]">獎號</th>
-                    <th class="p-3 text-center">水位值 (Sum)</th>
-                    <th class="p-3 text-center">熱:中:冷</th>
-                </tr>
-            </thead>
-            <tbody id="dataTable" class="text-xs"></tbody>
-        </table>
-    </div>
+    <script>
+        let rawData = null;
 
-<script>
-let globalData = null;
-const MAX_GAP = 30; // 顯示到隔30
+        // 1. 初始化讀取
+        async function init() {
+            try {
+                const res = await fetch(`./data.json?t=${Date.now()}`);
+                if (!res.ok) throw new Error("尚未偵測到 data.json");
+                rawData = await res.json();
+                
+                document.getElementById('status').innerText = `最後同步時間: ${new Date().toLocaleString()}`;
+                
+                // 首次渲染
+                renderTable('649');
+                
+                // 2. 綁定下拉選單事件 (關鍵修復)
+                document.getElementById('gameSelect').addEventListener('change', (e) => {
+                    renderTable(e.target.value);
+                });
 
-async function init() {
-    try {
-        // 自動從 GitHub 產出的檔案讀取資料
-        const response = await fetch('./data.json?t=' + new Date().getTime());
-        globalData = await response.json();
-        document.getElementById('updateTime').innerText = "最後更新: " + new Date().toLocaleString();
-        render();
-    } catch (e) {
-        document.getElementById('dataTable').innerHTML = "<tr><td colspan='10' class='p-10 text-center text-red-500'>尚未偵測到 data.json，請先手動執行一次 Actions 爬蟲。</td></tr>";
-    }
-}
-
-function render() {
-    if (!globalData) return;
-    const type = document.getElementById('lottoType').value;
-    const data = globalData[type];
-    const tbody = document.getElementById('dataTable');
-    const headRow = document.getElementById('headerRow');
-
-    // 重設表頭
-    while(headRow.children.length > 4) headRow.lastChild.remove();
-    for(let i=0; i<=MAX_GAP; i++) {
-        const th = document.createElement('th');
-        th.className = "p-2 border-l border-gray-700 text-center";
-        th.innerText = `隔${i}`;
-        headRow.appendChild(th);
-    }
-
-    let html = "";
-    data.forEach((row, idx) => {
-        let gapSum = 0;
-        let ratio = { h: 0, m: 0, c: 0 };
-        let hits = {};
-        const currentNums = row.sp ? [...row.nums, row.sp] : [...row.nums];
-
-        currentNums.forEach(n => {
-            let foundGap = -1;
-            for(let j = idx + 1; j < data.length; j++) {
-                if(data[j].nums.includes(n) || data[j].sp === n) {
-                    foundGap = j - idx - 1;
-                    break;
-                }
-            }
-            if(foundGap !== -1) {
-                gapSum += foundGap;
-                if(foundGap <= 4) ratio.h++;
-                else if(foundGap <= 15) ratio.m++;
-                else ratio.c++;
-                hits[foundGap] = n;
-            }
-        });
-
-        html += `<tr class="border-b hover:bg-blue-50">
-            <td class="p-3 font-bold sticky left-0 bg-white border-r">${row.id}<br><span class="text-[10px] font-normal text-gray-400">${row.date}</span></td>
-            <td class="p-3">
-                ${row.nums.map(n => `<span class="number-ball">${String(n).padStart(2,'0')}</span>`).join('')}
-                ${row.sp ? `<span class="number-ball special-ball">${String(row.sp).padStart(2,'0')}</span>` : ''}
-            </td>
-            <td class="p-3 text-center"><span class="sum-badge">${gapSum}</span></td>
-            <td class="p-3 text-center font-mono text-blue-600">${ratio.h}:${ratio.m}:${ratio.c}</td>`;
-
-        for(let g=0; g<=MAX_GAP; g++) {
-            if(hits[g] !== undefined) {
-                html += `<td class="p-1 gap-cell"><div class="hit-box">${String(hits[g]).padStart(2,'0')}<br><span class="text-[9px] font-normal">[0,${g}]</span></div></td>`;
-            } else {
-                html += `<td class="p-1 gap-cell text-gray-300">.</td>`;
+            } catch (e) {
+                document.getElementById('status').innerHTML = `<span class="text-red-500 font-bold">❌ 錯誤: ${e.message}</span>`;
             }
         }
-        html += `</tr>`;
-    });
-    tbody.innerHTML = html;
-}
 
-window.onload = init;
-</script>
+        // 3. 渲染邏輯
+        function renderTable(gameType) {
+            const list = rawData[gameType] || [];
+            const container = document.getElementById('resultBody');
+            
+            if (list.length === 0) {
+                container.innerHTML = `<tr><td colspan="3" class="p-10 text-gray-400">目前尚無 ${gameType} 數據</td></tr>`;
+                return;
+            }
+
+            container.innerHTML = list.map(item => {
+                const sum = item.nums.reduce((a, b) => a + b, 0);
+                const ballsHtml = item.nums.map(n => `<div class="ball ${gameType === '649' ? 'ball-blue' : 'ball-red'}">${n}</div>`).join('');
+                const spHtml = item.sp ? `<div class="text-xs text-gray-400 mt-1">特別號: <span class="text-red-500 font-bold">${item.sp}</span></div>` : '';
+
+                return `
+                    <tr class="hover:bg-blue-50 transition-colors">
+                        <td class="p-4">
+                            <div class="font-bold text-slate-900">${item.id}</div>
+                            <div class="text-xs text-gray-400">${item.date}</div>
+                        </td>
+                        <td class="p-4">
+                            <div class="flex justify-center gap-2">${ballsHtml}</div>
+                            ${spHtml}
+                        </td>
+                        <td class="p-4 font-mono font-bold text-lg text-blue-600">
+                            ${sum}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        init();
+    </script>
 </body>
 </html>
