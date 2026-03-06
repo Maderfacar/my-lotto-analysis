@@ -2,39 +2,41 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import os
-import re  # 務必檢查有沒有這一行！
+import re
 
 def get_lotto_data():
     url = "https://www.taiwanlottery.com.tw/index_info.aspx"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows) AppleWebKit/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
     try:
-        # 準備基礎結構
-        db = {"649": [], "539": []}
-        
-        # 嘗試抓取
         response = requests.get(url, headers=headers)
         response.encoding = 'utf-8'
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 解析大樂透 (簡化版邏輯確保穩定)
-        lotto_box = soup.find("div", {"class": "contents_box02"})
-        if lotto_box:
-            res_id = lotto_box.find("span", {"id": re.compile("Lotto649Control.*No_0")}).text if lotto_box.find("span", {"id": re.compile("Lotto649Control.*No_0")}) else "113000000"
-            # 這裡先塞一筆測試數據確保檔案一定會產生
-            db["649"].append({"id": "115000024", "date": "2026-03-06", "nums": [3, 15, 22, 28, 34, 47], "sp": 9})
-            
-        # 寫入檔案 (這一步最重要)
+        db = {"649": [], "539": []}
+
+        # --- 大樂透解析 ---
+        box649 = soup.find("div", {"class": "contents_box02"})
+        if box649:
+            nums = [int(box649.find("span", {"id": re.compile(f".*No{i}_0")}).text) for i in range(1, 7)]
+            sp = int(box649.find("span", {"id": re.compile(".*SNo_0")}).text)
+            draw_id = box649.find("span", {"id": re.compile(".*No_0")}).text
+            date = box649.find("span", {"id": re.compile(".*Date_0")}).text
+            db["649"].append({"id": draw_id, "date": date.replace("/", "-"), "nums": nums, "sp": sp})
+
+        # --- 539 解析 ---
+        box539 = soup.find("div", {"class": "contents_box03"})
+        if box539:
+            nums = [int(box539.find("span", {"id": re.compile(f".*No{i}_0")}).text) for i in range(1, 6)]
+            draw_id = box539.find("span", {"id": re.compile(".*No_0")}).text
+            date = box539.find("span", {"id": re.compile(".*Date_0")}).text
+            db["539"].append({"id": draw_id, "date": date.replace("/", "-"), "nums": nums, "sp": None})
+
         with open('data.json', 'w', encoding='utf-8') as f:
             json.dump(db, f, ensure_ascii=False, indent=4)
-        print("data.json 檔案已成功生成")
-            
-    except Exception as e:
-        print(f"錯誤: {e}")
-        # 即使報錯也生成一個空結構，避免網頁崩潰
-        with open('data.json', 'w', encoding='utf-8') as f:
-            json.dump({"649": [], "539": []}, f)
+        print("數據抓取成功！")
 
-import re # 補上 re 套件
+    except Exception as e:
+        print(f"解析出錯: {e}")
+
 if __name__ == "__main__":
     get_lotto_data()
