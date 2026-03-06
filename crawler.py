@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import os
+import re  # 務必檢查有沒有這一行！
 
 def get_lotto_data():
     url = "https://www.taiwanlottery.com.tw/index_info.aspx"
