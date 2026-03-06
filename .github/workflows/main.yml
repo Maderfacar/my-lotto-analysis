@@ -1,4 +1,4 @@
-name: Lotto Auto Update
+name: Lotto_Auto_Update_V3
 
 on:
   schedule:
